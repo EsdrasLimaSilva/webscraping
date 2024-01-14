@@ -114,7 +114,9 @@ def put_into_db(ti):
 # Get data
 def get_data(ti):
     # retrieving current page
-    current_page = ti.xcom_pull(key="current_page", task_ids="get_data_tsk", default_arg=1)
+    current_page = ti.xcom_pull(key="current_page", task_ids="get_data_tsk")
+    if current_page is None:
+        current_page = 1       
 
     # #getting the url
     url = PAGE_URL
@@ -151,6 +153,7 @@ def get_data(ti):
 # creating the DAG
 with DAG(
     "webscraping",
+    start_date=datetime.now(),
     description='Webscraping a web page',
     schedule=timedelta(minutes=15), # we get 20 books each 15 minutes
     catchup=False,
@@ -161,7 +164,7 @@ with DAG(
 ) as dag:
     # defining the tasks
     get_data_tsk = PythonOperator(task_id="get_data_tsk", python_callable=get_data)
-    put_into_db_tsk = PythonOperator(task_it="put_into_db_tsk", python_callable=put_into_db)
+    put_into_db_tsk = PythonOperator(task_id="put_into_db_tsk", python_callable=put_into_db)
 
     # setting up downstream and upstream
     get_data_tsk >> put_into_db_tsk
