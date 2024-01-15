@@ -1,6 +1,7 @@
 # airflow
 from airflow.models.dag import DAG
 from airflow.operators.python import PythonOperator
+from airflow.models import Variable
 
 # other tools
 import re
@@ -105,8 +106,6 @@ def put_into_db(ti):
     cur.executemany("INSERT INTO Books(title, price, availability, rating, upc) VALUES(%s, %s, %s, %s, %s)", tuples)
     conn.commit()
 
-    print(tuples)
-
     # closing the cursor connection
     cur.close()
     conn.close()
@@ -114,9 +113,12 @@ def put_into_db(ti):
 # Get data
 def get_data(ti):
     # retrieving current page
-    current_page = ti.xcom_pull(key="current_page", task_ids="get_data_tsk")
-    if current_page is None:
-        current_page = 1       
+    current_page = Variable.get("current_page")
+
+    if(not current_page):
+        current_page = 1
+    
+    current_page=int(current_page)
 
     # #getting the url
     url = PAGE_URL
@@ -134,7 +136,7 @@ def get_data(ti):
     i = 0
     # inserting data
     for row in soup.select("article.product_pod"):
-        book_url = url + row.find('h3').find('a').get_attribute_list('href')[0]
+        book_url = PAGE_URL + "catalogue/" + row.find('h3').find('a').get_attribute_list('href')[0]
         book = get_book_info(book_url)
         books.append(book)
     
@@ -142,7 +144,7 @@ def get_data(ti):
     # updating books
     ti.xcom_push(key="books", value=books)
     # updating the current page
-    ti.xcom_push(key="current_page", value=current_page+1)
+    Variable.set("current_page", current_page+1)
 
 
 # =======================================
@@ -155,9 +157,10 @@ with DAG(
     "webscraping",
     start_date=datetime.now(),
     description='Webscraping a web page',
-    schedule=timedelta(minutes=15), # we get 20 books each 15 minutes
+    schedule=timedelta(minutes=5), # we get 20 books each 15 minutes
     catchup=False,
     default_args={
+        'depends_on_past': True,
         'retires': 1,
         'retry_delay': timedelta(minutes=5)
     }
